@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Analysis Result | PhishGuard{% endblock %}
+{% block content %}
+<div class="page-top"><a class="text-link" href="{{ url_for('index') }}">← Back to scanner</a><span class="eyebrow">ANALYSIS REPORT #{{ scan.id }}</span></div>
+<section class="result-header">
+  <div>
+    <div class="eyebrow">URL ANALYSIS RESULT</div>
+    <h1>Risk assessment</h1>
+    <p class="url-break">{{ scan.url }}</p>
+  </div>
+  <div class="score-card {{ scan.risk_level|lower }}">
+    <div class="score">{{ scan.risk_score }}<small>/100</small></div>
+    <span class="pill {{ scan.risk_level|lower }}">{{ scan.risk_level }} Risk</span>
+  </div>
+</section>
+<section class="panel">
+  <h2>Detected indicators</h2>
+  <div class="findings">
+    {% for item in scan.findings %}
+    <div class="finding">
+      <div class="finding-mark {% if item.points > 0 %}detected{% endif %}">{% if item.points > 0 %}⚠{% else %}✓{% endif %}</div>
+      <div class="finding-copy"><strong>{{ item.label }}</strong><p>{{ item.detail }}</p></div>
+      <div class="points">{% if item.points > 0 %}+{{ item.points }}{% else %}0{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+<section class="recommendation">
+  <div class="eyebrow">RECOMMENDATION</div>
+  <p>{{ scan.recommendation }}</p>
+</section>
+<div class="notice">{{ scan.disclaimer }}</div>
+{% endblock %}
