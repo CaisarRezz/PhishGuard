@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}PhishGuard | URL Scanner{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">DEFENSIVE SECURITY TOOL</div>
+  <h1>Check before<br><span>you click.</span></h1>
+  <p>Analisis karakteristik tautan dan pahami indikator risiko sebelum membukanya.</p>
+  <form class="scan-form" action="{{ url_for('scan') }}" method="post">
+    <label for="url">Masukkan URL yang ingin diperiksa</label>
+    <div class="input-row">
+      <input id="url" name="url" type="text" placeholder="https://example.com" required maxlength="2048" autocomplete="off">
+      <button type="submit" id="scan-button">Analyze URL <span>→</span></button>
+    </div>
+    <small>PhishGuard menganalisis teks URL secara lokal dan tidak membuka situs tujuan.</small>
+  </form>
+</section>
+
+<section class="section-head">
+  <div><div class="eyebrow">OVERVIEW</div><h2>Recent scans</h2></div>
+  <a class="text-link" href="{{ url_for('history') }}">View all →</a>
+</section>
+{% if recent_scans %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>URL</th><th>Risk score</th><th>Status</th><th>Time</th></tr></thead>
+    <tbody>
+    {% for scan in recent_scans %}
+      <tr>
+        <td><a href="{{ url_for('result', scan_id=scan.id) }}">{{ scan.hostname }}</a></td>
+        <td>{{ scan.risk_score }}/100</td>
+        <td><span class="pill {{ scan.risk_level|lower }}">{{ scan.risk_level }}</span></td>
+        <td>{{ scan.created_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty">Belum ada pemeriksaan. Masukkan URL pertama untuk memulai.</div>
+{% endif %}
+<div class="notice"><strong>Catatan:</strong> Skor risiko adalah hasil heuristik prototype. Skor rendah bukan jaminan sebuah situs aman.</div>
+{% endblock %}
