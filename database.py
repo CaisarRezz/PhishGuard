@@ -33,6 +33,20 @@ def init_db(db_path=None):
             created_at TEXT NOT NULL
         )
     """)
+    
+    
+    # Check and migrate existing scans table
+    cursor.execute("PRAGMA table_info(scans)")
+    existing_columns = {
+        row["name"] for row in cursor.fetchall()
+}
+
+    if "scan_type" not in existing_columns:
+        cursor.execute("""
+            ALTER TABLE scans
+            ADD COLUMN scan_type TEXT NOT NULL DEFAULT 'Unknown'
+        """)
+
 
     # Table 2: Watchlist
     cursor.execute("""
