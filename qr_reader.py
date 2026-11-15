@@ -1,16 +1,9 @@
-import cv2
+"""QR Reader bridge.
+Maintains backward compatibility with legacy read_qr function.
+"""
+from backend.services.qr_analyzer import decode_qr_from_file, decode_qr_from_bytes, analyze_qr_code
 
-def read_qr(image_path):
-    image = cv2.imread(image_path)
+def read_qr(image_path: str):
+    return decode_qr_from_file(image_path)
 
-    if image is None:
-        return None
-
-    detector = cv2.QRCodeDetector()
-
-    data, points, _ = detector.detectAndDecode(image)
-
-    if data:
-        return data
-
-    return None
+__all__ = ["read_qr", "decode_qr_from_file", "decode_qr_from_bytes", "analyze_qr_code"]
