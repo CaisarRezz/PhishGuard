@@ -34,17 +34,58 @@ def init_db(db_path=None):
         )
     """)
     
-    
-    # Check and migrate existing scans table
+    # Check existing scans table structure
     cursor.execute("PRAGMA table_info(scans)")
     existing_columns = {
         row["name"] for row in cursor.fetchall()
-}
+    }
 
-    if "scan_type" not in existing_columns:
+    # Migrate legacy scans table to current structure
+    if "target" not in existing_columns:
+
+        # Avoid overwriting an existing backup
         cursor.execute("""
-            ALTER TABLE scans
-            ADD COLUMN scan_type TEXT NOT NULL DEFAULT 'Unknown'
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='scans_legacy'
+        """)
+
+        if cursor.fetchone():
+            raise RuntimeError(
+                "scans_legacy already exists. "
+                "Please inspect the database before migrating again."
+            )
+
+        # Preserve old table
+        cursor.execute(
+            "ALTER TABLE scans RENAME TO scans_legacy"
+        )
+
+        # Create current table
+        cursor.execute("""
+            CREATE TABLE scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_type TEXT NOT NULL,
+                target TEXT NOT NULL,
+                risk_score INTEGER NOT NULL,
+                risk_level TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        # Copy old data into the new structure
+        cursor.execute("""
+            INSERT INTO scans (
+                id, scan_type, target,
+                risk_score, risk_level, created_at
+            )
+            SELECT
+                id,
+                COALESCE(NULLIF(scan_type, ''), 'Unknown'),
+                COALESCE(NULLIF(url, ''), NULLIF(hostname, ''), 'Unknown'),
+                risk_score,
+                risk_level,
+                created_at
+            FROM scans_legacy
         """)
 
 
