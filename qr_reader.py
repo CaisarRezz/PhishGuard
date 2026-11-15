@@ -1,9 +1,14 @@
-"""QR Reader bridge.
-Maintains backward compatibility with legacy read_qr function.
+"""PhishGuard QR Reader Bridge.
+Provides simple helper functions for QR decoding.
 """
-from backend.services.qr_analyzer import decode_qr_from_file, decode_qr_from_bytes, analyze_qr_code
+from analyzer import scan_qr_from_bytes
 
-def read_qr(image_path: str):
-    return decode_qr_from_file(image_path)
 
-__all__ = ["read_qr", "decode_qr_from_file", "decode_qr_from_bytes", "analyze_qr_code"]
+def read_qr_file(file_path: str):
+    """Read and decode a QR code from a file path."""
+    with open(file_path, "rb") as f:
+        data = f.read()
+    return scan_qr_from_bytes(data)
+
+
+__all__ = ["read_qr_file", "scan_qr_from_bytes"]

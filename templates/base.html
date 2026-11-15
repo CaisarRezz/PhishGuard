@@ -1,30 +1,111 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}PhishGuard{% endblock %}</title>
+  <title>{% block title %}PhishGuard — Cybersecurity SOC Dashboard{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="{{ url_for('index') }}"><span class="brand-icon">盾</span> PhishGuard</a>
-    <nav>
-      <a href="{{ url_for('index') }}">Scanner</a>
-      <a href="{{ url_for('legacy_history') }}">Scan History</a>
-    </nav>
-  </header>
-  <main class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
-  <footer>PhishGuard · Prototype edukasi keamanan digital</footer>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="app-sidebar">
+      <a href="{{ url_for('dashboard') }}" class="sidebar-brand">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <div class="brand-title">PHISHGUARD</div>
+          <div class="brand-sub">Cybersecurity Platform</div>
+        </div>
+      </a>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Navigation</div>
+
+        <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.path == '/' %}active{% endif %}">
+          <span class="icon">📊</span>
+          <span>Overview</span>
+        </a>
+
+        <a href="{{ url_for('url_scanner') }}" class="nav-link {% if request.path == '/url-scanner' %}active{% endif %}">
+          <span class="icon">🌐</span>
+          <span>URL Scanner</span>
+        </a>
+
+        <a href="{{ url_for('qr_shield') }}" class="nav-link {% if request.path == '/qr-shield' %}active{% endif %}">
+          <span class="icon">📱</span>
+          <span>QR Shield</span>
+        </a>
+
+        <a href="{{ url_for('mailguard') }}" class="nav-link {% if request.path == '/mailguard' %}active{% endif %}">
+          <span class="icon">✉️</span>
+          <span>MailGuard</span>
+        </a>
+
+        <div class="nav-section-title">Threat Intel</div>
+
+        <a href="{{ url_for('watchlist') }}" class="nav-link {% if request.path == '/watchlist' %}active{% endif %}">
+          <span class="icon">🚨</span>
+          <span>Threat Watchlist</span>
+        </a>
+
+        <a href="{{ url_for('history') }}" class="nav-link {% if request.path == '/history' %}active{% endif %}">
+          <span class="icon">📜</span>
+          <span>Scan History</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <div class="pulse-dot"></div>
+          <span>API Engine Online</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button type="button" class="mobile-menu-btn" id="mobile-toggle" aria-label="Toggle Navigation">
+            ☰
+          </button>
+          <div class="page-title">{% block page_title %}Security Operations Center{% endblock %}</div>
+        </div>
+        <div class="topbar-right">
+          <div class="env-badge">
+            <span>●</span> Local SOC Mode &bull; Port 5000
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="content-body">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="panel" style="border-left: 4px solid var(--{% if category == 'error' %}red{% else %}green{% endif %}); padding: 12px 18px; margin-bottom: 20px;">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        PhishGuard &copy; Security Operations Center &bull; Heuristic Threat Engine &bull; Python Flask &bull; Offline Architecture
+      </footer>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Global JavaScript -->
   <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

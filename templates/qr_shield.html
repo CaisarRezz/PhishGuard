@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}QR Shield — PhishGuard{% endblock %}
+{% block page_title %}QR Shield Decoder{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span>📱</span> QR Code Computer Vision Inspection
+    </div>
+  </div>
+  <p class="lead" style="margin-bottom: 20px;">
+    Decodes embedded QR code content using OpenCV image processing and assesses hidden redirection targets for phishing vectors.
+  </p>
+
+  <form id="qr-scan-form">
+    <!-- Drag & Drop Zone -->
+    <div class="drop-zone" id="qr-drop-zone">
+      <div class="drop-zone-icon">📷</div>
+      <h3>Drag &amp; Drop QR Code Image Here</h3>
+      <p class="text-muted" style="font-size: 13px;">or click anywhere to browse files</p>
+      <input type="file" id="qr-file-input" name="file" accept="image/png, image/jpeg, image/jpg, image/webp" required>
+      <img id="qr-preview-img" class="drop-zone-preview" alt="QR Preview">
+      <div id="file-info" class="text-primary font-mono mt-2" style="font-size: 13px; display: none;"></div>
+    </div>
+
+    <div class="mt-4" style="display: flex; gap: 12px; align-items: center;">
+      <button type="submit" id="btn-scan-qr" class="btn btn-primary" disabled>
+        <span class="btn-text">Decode &amp; Inspect QR</span>
+        <span class="spinner" style="display: none;"></span>
+      </button>
+      <button type="button" id="btn-clear-qr" class="btn btn-secondary" style="display: none;">
+        Clear Image
+      </button>
+      <span class="form-hint" style="margin-top: 0;">Max upload limit: 5 MB &bull; In-memory processing &bull; Zero storage retention</span>
+    </div>
+  </form>
+</div>
+
+<!-- Dynamic Result Card -->
+<div id="qr-result-card" class="result-card" {% if result and result.decoded %}style="display: block;"{% endif %}>
+  <div class="result-card-header">
+    <div class="result-target-wrap">
+      <div class="result-badge-label">DECODED QR PAYLOAD</div>
+      <h2>Embedded Content</h2>
+      <div class="result-target-text" id="res-qr-content">{{ result.content if result else '' }}</div>
+      <div class="mt-2" id="res-qr-type-badge">
+        {% if result %}
+          {% if result.is_url %}
+            <span class="badge url">Detected Web URL</span>
+          {% else %}
+            <span class="badge plain">Plain Text Payload</span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="score-box {{ result.risk_level | lower if result else 'low' }}" id="res-qr-score-box">
+      <div class="score-box-title">RISK SCORE</div>
+      <div class="score-num" id="res-qr-score-num">{{ result.risk_score if result else 0 }}</div>
+      <div id="res-qr-pill-wrap">
+        {% if result %}
+          <span class="pill {{ result.risk_level | lower }}">{{ result.risk_level }} Risk</span>
+        {% else %}
+          <span class="pill low">Low Risk</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="background: var(--bg-card-alt); margin-bottom: 16px;">
+    <h3>Inspection Indicators</h3>
+    <ul class="findings-list" id="res-qr-findings-list">
+      {% if result and result.reasons %}
+        {% for reason in result.reasons %}
+        <li class="finding-item">
+          <div class="finding-dot {% if result.risk_score >= 70 %}danger{% elif result.risk_score >= 40 %}warning{% else %}info{% endif %}"></div>
+          <div>{{ reason }}</div>
+        </li>
+        {% endfor %}
+      {% endif %}
+    </ul>
+  </div>
+
+  <div class="recommendation-box {{ result.risk_level | lower if result else 'low' }}" id="res-qr-rec-box">
+    <h4>Security Recommendation</h4>
+    <p id="res-qr-recommendation">{{ result.recommendation if result else '' }}</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const dropZone = document.getElementById('qr-drop-zone');
+  const fileInput = document.getElementById('qr-file-input');
+  const previewImg = document.getElementById('qr-preview-img');
+  const fileInfo = document.getElementById('file-info');
+  const btnScan = document.getElementById('btn-scan-qr');
+  const btnClear = document.getElementById('btn-clear-qr');
+  const btnText = btnScan.querySelector('.btn-text');
+  const spinner = btnScan.querySelector('.spinner');
+  const form = document.getElementById('qr-scan-form');
+  const resultCard = document.getElementById('qr-result-card');
+
+  let selectedFile = null;
+
+  // File selection handling
+  function handleFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      PhishGuard.showToast('Image exceeds 5 MB upload limit.', 'error');
+      return;
+    }
+    selectedFile = file;
+
+    // Display preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewImg.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+
+    fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    fileInfo.style.display = 'block';
+    btnScan.disabled = false;
+    btnClear.style.display = 'inline-flex';
+  }
+
+  // Clear file
+  btnClear.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewImg.src = '';
+    previewImg.style.display = 'none';
+    fileInfo.style.display = 'none';
+    btnScan.disabled = true;
+    btnClear.style.display = 'none';
+    resultCard.style.display = 'none';
+  });
+
+  // Click on dropzone opens file dialog
+  dropZone.addEventListener('click', (e) => {
+    if (e.target !== btnClear) fileInput.click();
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  });
+
+  // Drag and drop events
+  ['dragenter', 'dragover'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  // Submit scan via Fetch API
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!selectedFile) {
+      PhishGuard.showToast('Please select a QR code image to inspect.', 'error');
+      return;
+    }
+
+    btnScan.disabled = true;
+    btnText.textContent = 'Decoding Image...';
+    spinner.style.display = 'inline-block';
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await PhishGuard.request('/api/scan-qr', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = res.data;
+
+      // Populate results
+      document.getElementById('res-qr-content').textContent = data.content;
+      document.getElementById('res-qr-type-badge').innerHTML = data.is_url
+        ? '<span class="badge url">Detected Web URL</span>'
+        : '<span class="badge plain">Plain Text Payload</span>';
+
+      document.getElementById('res-qr-score-num').textContent = data.risk_score;
+
+      const scoreBox = document.getElementById('res-qr-score-box');
+      scoreBox.className = `score-box ${data.risk_level.toLowerCase()}`;
+
+      document.getElementById('res-qr-pill-wrap').innerHTML = PhishGuard.getRiskPill(data.risk_level);
+
+      const findingsList = document.getElementById('res-qr-findings-list');
+      const dotType = data.risk_score >= 70 ? 'danger' : (data.risk_score >= 40 ? 'warning' : 'info');
+      findingsList.innerHTML = (data.reasons || []).map(r => `
+        <li class="finding-item">
+          <div class="finding-dot ${dotType}"></div>
+          <div>${r}</div>
+        </li>
+      `).join('');
+
+      const recBox = document.getElementById('res-qr-rec-box');
+      recBox.className = `recommendation-box ${data.risk_level.toLowerCase()}`;
+      document.getElementById('res-qr-recommendation').textContent = data.recommendation;
+
+      resultCard.style.display = 'block';
+      resultCard.scrollIntoView({ behavior: 'smooth' });
+      PhishGuard.showToast(`QR Decoded: ${data.risk_level} Risk`, data.risk_level === 'High' ? 'error' : 'success');
+    } catch (err) {
+      console.error('QR scan error:', err);
+    } finally {
+      btnScan.disabled = false;
+      btnText.textContent = 'Decode & Inspect QR';
+      spinner.style.display = 'none';
+    }
+  });
+});
+</script>
+{% endblock %}

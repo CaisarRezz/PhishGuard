@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Threat Watchlist — PhishGuard{% endblock %}
+{% block page_title %}Threat Watchlist Intelligence{% endblock %}
+
+{% block content %}
+<!-- Add Domain Panel -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span>🚨</span> Add Malicious Domain Indicator
+    </div>
+  </div>
+  <p class="lead" style="margin-bottom: 18px;">
+    Domains registered in the Threat Watchlist trigger an immediate high-confidence phishing alert (+70 pts) across URL, QR, and Email scanning engines.
+  </p>
+
+  <form id="watchlist-add-form">
+    <div class="input-row" style="align-items: flex-end;">
+      <div style="flex: 1.2;">
+        <label class="form-label" for="wl-domain">Domain Name / Hostname <span class="text-red">*</span></label>
+        <input
+          type="text"
+          id="wl-domain"
+          class="form-control"
+          placeholder="e.g. evil-phishing-portal.com"
+          required
+        >
+      </div>
+
+      <div style="flex: 2;">
+        <label class="form-label" for="wl-desc">Threat Intelligence Notes (Optional)</label>
+        <input
+          type="text"
+          id="wl-desc"
+          class="form-control"
+          placeholder="e.g. Known credential harvesting landing page spoofing online banking"
+        >
+      </div>
+
+      <div>
+        <button type="submit" id="btn-add-wl" class="btn btn-primary" style="height: 44px; white-space: nowrap;">
+          <span class="btn-text">+ Add to Watchlist</span>
+          <span class="spinner" style="display: none;"></span>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Watchlist Table Panel -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span>🛡️</span> Monitored Threat Domains (<span id="wl-count">{{ items | length }}</span>)
+    </div>
+    <div>
+      <button type="button" class="btn btn-secondary" id="btn-refresh-wl" style="font-size: 12px; padding: 6px 14px;">
+        🔄 Refresh List
+      </button>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 80px;">ID</th>
+          <th>Domain / Hostname</th>
+          <th>Threat Description</th>
+          <th>Date Added</th>
+          <th class="text-right" style="width: 110px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="watchlist-tbody">
+        {% if items %}
+          {% for item in items %}
+          <tr id="wl-row-{{ item.id }}">
+            <td class="text-muted font-mono">#{{ item.id }}</td>
+            <td><code class="text-red font-mono" style="font-weight: 700;">{{ item.domain }}</code></td>
+            <td class="text-muted">{{ item.description or 'No description provided' }}</td>
+            <td class="text-muted font-mono" style="font-size: 12px;">{{ item.created_at }}</td>
+            <td class="text-right">
+              <button
+                type="button"
+                class="btn-danger-sm btn-delete-wl"
+                data-id="{{ item.id }}"
+                data-domain="{{ item.domain }}"
+              >
+                Delete
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr id="wl-empty-row">
+            <td colspan="5" class="table-empty">No domains registered in the Threat Watchlist yet.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('watchlist-add-form');
+  const domainInput = document.getElementById('wl-domain');
+  const descInput = document.getElementById('wl-desc');
+  const btnAdd = document.getElementById('btn-add-wl');
+  const btnAddText = btnAdd.querySelector('.btn-text');
+  const btnAddSpinner = btnAdd.querySelector('.spinner');
+  const btnRefresh = document.getElementById('btn-refresh-wl');
+  const tbody = document.getElementById('watchlist-tbody');
+  const countSpan = document.getElementById('wl-count');
+
+  // Load watchlist items via GET /api/watchlist
+  async function loadWatchlist() {
+    try {
+      const res = await PhishGuard.request('/api/watchlist');
+      const items = res.data || [];
+      countSpan.textContent = items.length;
+
+      if (items.length > 0) {
+        tbody.innerHTML = items.map(item => `
+          <tr id="wl-row-${item.id}">
+            <td class="text-muted font-mono">#${item.id}</td>
+            <td><code class="text-red font-mono" style="font-weight: 700;">${item.domain}</code></td>
+            <td class="text-muted">${item.description || 'No description provided'}</td>
+            <td class="text-muted font-mono" style="font-size: 12px;">${item.created_at}</td>
+            <td class="text-right">
+              <button
+                type="button"
+                class="btn-danger-sm btn-delete-wl"
+                data-id="${item.id}"
+                data-domain="${item.domain}"
+              >
+                Delete
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr id="wl-empty-row"><td colspan="5" class="table-empty">No domains registered in the Threat Watchlist yet.</td></tr>';
+      }
+    } catch (err) {
+      console.error('Failed to load watchlist:', err);
+    }
+  }
+
+  // Add domain via POST /api/watchlist
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const domain = domainInput.value.trim();
+    const description = descInput.value.trim();
+
+    if (!domain) {
+      PhishGuard.showToast('Please enter a domain name.', 'error');
+      return;
+    }
+
+    btnAdd.disabled = true;
+    btnAddText.textContent = 'Adding...';
+    btnAddSpinner.style.display = 'inline-block';
+
+    try {
+      const res = await PhishGuard.request('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, description })
+      });
+
+      PhishGuard.showToast(`Domain '${domain}' added to watchlist`, 'success');
+      domainInput.value = '';
+      descInput.value = '';
+      await loadWatchlist();
+    } catch (err) {
+      console.error('Add watchlist error:', err);
+    } finally {
+      btnAdd.disabled = false;
+      btnAddText.textContent = '+ Add to Watchlist';
+      btnAddSpinner.style.display = 'none';
+    }
+  });
+
+  // Delete domain via DELETE /api/watchlist/<id>
+  tbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.btn-delete-wl');
+    if (!btn) return;
+
+    const id = btn.getAttribute('data-id');
+    const domain = btn.getAttribute('data-domain');
+
+    if (!confirm(`Are you sure you want to remove '${domain}' from the Threat Watchlist?`)) {
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      await PhishGuard.request(`/api/watchlist/${id}`, {
+        method: 'DELETE'
+      });
+      PhishGuard.showToast(`Removed '${domain}' from watchlist`, 'success');
+      await loadWatchlist();
+    } catch (err) {
+      console.error('Delete watchlist error:', err);
+      btn.disabled = false;
+    }
+  });
+
+  btnRefresh.addEventListener('click', async () => {
+    btnRefresh.disabled = true;
+    await loadWatchlist();
+    btnRefresh.disabled = false;
+    PhishGuard.showToast('Watchlist refreshed', 'info');
+  });
+});
+</script>
+{% endblock %}

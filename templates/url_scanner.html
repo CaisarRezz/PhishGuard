@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}URL Scanner — PhishGuard{% endblock %}
+{% block page_title %}URL Threat Scanner{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span>🌐</span> Heuristic URL Security Inspection
+    </div>
+  </div>
+  <p class="lead" style="margin-bottom: 16px;">
+    Evaluates web addresses against IP-based hosts, deceptive keywords, URL length, HTTP protocol vulnerabilities, and Threat Watchlist signatures.
+  </p>
+
+  <form id="url-scan-form" class="scan-form" style="margin-bottom: 0;">
+    <div class="form-group">
+      <label class="form-label" for="url-input">Target URL to Inspect</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="url-input"
+          class="form-control"
+          placeholder="e.g. https://phishing-bank-login.com/portal or http://192.168.1.1/login"
+          value="{{ url_input or '' }}"
+          required
+        >
+        <button type="submit" id="btn-scan-url" class="btn btn-primary" style="flex-shrink: 0;">
+          <span class="btn-text">Scan URL</span>
+          <span class="spinner" style="display: none;"></span>
+        </button>
+      </div>
+      <span class="form-hint">🛡️ Offline security sandbox: PhishGuard never navigates to, resolves, or contacts the target destination.</span>
+    </div>
+  </form>
+</div>
+
+<!-- Dynamic Result Card -->
+<div id="url-result-card" class="result-card" {% if result and result.valid %}style="display: block;"{% endif %}>
+  <div class="result-card-header">
+    <div class="result-target-wrap">
+      <div class="result-badge-label">ANALYSIS REPORT</div>
+      <h2>Target Inspection</h2>
+      <div class="result-target-text" id="res-target-url">{{ result.url if result else '' }}</div>
+      <p class="text-muted mt-2" style="font-size: 13px;">
+        Hostname: <strong id="res-hostname">{{ result.hostname if result else '' }}</strong>
+      </p>
+    </div>
+
+    <div class="score-box {{ result.risk_level | lower if result else 'low' }}" id="res-score-box">
+      <div class="score-box-title">RISK SCORE</div>
+      <div class="score-num" id="res-score-num">{{ result.risk_score if result else 0 }}</div>
+      <div id="res-pill-wrap">
+        {% if result %}
+          <span class="pill {{ result.risk_level | lower }}">{{ result.risk_level }} Risk</span>
+        {% else %}
+          <span class="pill low">Low Risk</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="background: var(--bg-card-alt); margin-bottom: 16px;">
+    <h3>Detection Indicators</h3>
+    <ul class="findings-list" id="res-findings-list">
+      {% if result and result.reasons %}
+        {% for reason in result.reasons %}
+        <li class="finding-item">
+          <div class="finding-dot {% if result.risk_score >= 70 %}danger{% elif result.risk_score >= 40 %}warning{% else %}info{% endif %}"></div>
+          <div>{{ reason }}</div>
+        </li>
+        {% endfor %}
+      {% endif %}
+    </ul>
+  </div>
+
+  <div class="recommendation-box {{ result.risk_level | lower if result else 'low' }}" id="res-rec-box">
+    <h4>Security Recommendation</h4>
+    <p id="res-recommendation">{{ result.recommendation if result else '' }}</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('url-scan-form');
+  const input = document.getElementById('url-input');
+  const btn = document.getElementById('btn-scan-url');
+  const btnText = btn.querySelector('.btn-text');
+  const spinner = btn.querySelector('.spinner');
+  const resultCard = document.getElementById('url-result-card');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = input.value.trim();
+    if (!url) {
+      PhishGuard.showToast('Please enter a target URL.', 'error');
+      return;
+    }
+
+    // Set loading state
+    btn.disabled = true;
+    btnText.textContent = 'Analyzing...';
+    spinner.style.display = 'inline-block';
+
+    try {
+      const res = await PhishGuard.request('/api/scan-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+
+      const data = res.data;
+
+      // Populate results
+      document.getElementById('res-target-url').textContent = data.url;
+      document.getElementById('res-hostname').textContent = data.hostname;
+      document.getElementById('res-score-num').textContent = data.risk_score;
+
+      const scoreBox = document.getElementById('res-score-box');
+      scoreBox.className = `score-box ${data.risk_level.toLowerCase()}`;
+
+      document.getElementById('res-pill-wrap').innerHTML = PhishGuard.getRiskPill(data.risk_level);
+
+      const findingsList = document.getElementById('res-findings-list');
+      const dotType = data.risk_score >= 70 ? 'danger' : (data.risk_score >= 40 ? 'warning' : 'info');
+      findingsList.innerHTML = (data.reasons || []).map(r => `
+        <li class="finding-item">
+          <div class="finding-dot ${dotType}"></div>
+          <div>${r}</div>
+        </li>
+      `).join('');
+
+      const recBox = document.getElementById('res-rec-box');
+      recBox.className = `recommendation-box ${data.risk_level.toLowerCase()}`;
+      document.getElementById('res-recommendation').textContent = data.recommendation;
+
+      resultCard.style.display = 'block';
+      resultCard.scrollIntoView({ behavior: 'smooth' });
+      PhishGuard.showToast(`URL Scan complete: ${data.risk_level} Risk`, data.risk_level === 'High' ? 'error' : 'success');
+    } catch (err) {
+      console.error('URL scan error:', err);
+    } finally {
+      btn.disabled = false;
+      btnText.textContent = 'Scan URL';
+      spinner.style.display = 'none';
+    }
+  });
+});
+</script>
+{% endblock %}

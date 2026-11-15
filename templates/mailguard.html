@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}MailGuard — PhishGuard{% endblock %}
+{% block page_title %}MailGuard Phishing Analyzer{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span>✉️</span> Heuristic Email Threat Inspection
+    </div>
+  </div>
+  <p class="lead" style="margin-bottom: 20px;">
+    Examines email messaging for social engineering cues, coercive urgency, credential harvest patterns, and extracts hyperlinks for nested security inspection.
+  </p>
+
+  <form id="mailguard-form">
+    <div class="form-group">
+      <label class="form-label" for="email-subject">Email Subject Header (Optional)</label>
+      <input
+        type="text"
+        id="email-subject"
+        class="form-control"
+        placeholder="e.g. URGENT: Your bank account will be suspended within 24 hours"
+        value="{{ subject or '' }}"
+      >
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="email-body">Email Message Body <span class="text-red">*</span></label>
+      <textarea
+        id="email-body"
+        class="form-control textarea"
+        rows="7"
+        placeholder="Paste full raw email text or body content here for inspection..."
+        required
+      >{{ body or '' }}</textarea>
+      <span class="form-hint">🔒 Privacy Guarantee: Text is evaluated locally in-memory and discarded immediately after telemetry extraction.</span>
+    </div>
+
+    <div class="mt-2">
+      <button type="submit" id="btn-scan-email" class="btn btn-primary">
+        <span class="btn-text">Analyze Email Content</span>
+        <span class="spinner" style="display: none;"></span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Dynamic Result Card -->
+<div id="email-result-card" class="result-card" {% if result %}style="display: block;"{% endif %}>
+  <div class="result-card-header">
+    <div class="result-target-wrap">
+      <div class="result-badge-label">MAILGUARD EVALUATION</div>
+      <h2>Phishing Risk Assessment</h2>
+      <div id="res-email-subject-wrap" class="mt-2 text-muted" style="font-size: 13.5px;">
+        Subject: <strong id="res-email-subject" class="text-main">{{ result.subject if result and result.subject else '(No Subject)' }}</strong>
+      </div>
+    </div>
+
+    <div class="score-box {{ result.risk_level | lower if result else 'low' }}" id="res-email-score-box">
+      <div class="score-box-title">RISK SCORE</div>
+      <div class="score-num" id="res-email-score-num">{{ result.risk_score if result else 0 }}</div>
+      <div id="res-email-pill-wrap">
+        {% if result %}
+          <span class="pill {{ result.risk_level | lower }}">{{ result.risk_level }} Risk</span>
+        {% else %}
+          <span class="pill low">Low Risk</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Detected Keywords -->
+  <div class="panel" id="keywords-panel" style="background: var(--bg-card-alt); margin-bottom: 16px; {% if not (result and result.detected_keywords) %}display: none;{% endif %}">
+    <h3>Detected Urgency &amp; Phishing Keywords</h3>
+    <div class="chips-wrap" id="res-keywords-chips">
+      {% if result and result.detected_keywords %}
+        {% for kw in result.detected_keywords %}
+          <span class="chip">{{ kw }}</span>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Extracted URLs -->
+  <div class="panel" id="urls-panel" style="background: var(--bg-card-alt); margin-bottom: 16px; {% if not (result and result.extracted_urls) %}display: none;{% endif %}">
+    <h3>Extracted Embedded Links</h3>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Hyperlink Target</th>
+            <th>Hostname</th>
+            <th>Score</th>
+            <th>Risk Level</th>
+          </tr>
+        </thead>
+        <tbody id="res-urls-tbody">
+          {% if result and result.url_analyses %}
+            {% for u in result.url_analyses %}
+            <tr>
+              <td class="cell-target font-mono">{{ u.url }}</td>
+              <td class="font-mono text-muted">{{ u.hostname }}</td>
+              <td><strong>{{ u.risk_score }} / 100</strong></td>
+              <td><span class="pill {{ u.risk_level | lower }}">{{ u.risk_level }}</span></td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="recommendation-box {{ result.risk_level | lower if result else 'low' }}" id="res-email-rec-box">
+    <h4>Security Recommendation</h4>
+    <p id="res-email-recommendation">{{ result.recommendation if result else '' }}</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('mailguard-form');
+  const subjectInput = document.getElementById('email-subject');
+  const bodyInput = document.getElementById('email-body');
+  const btn = document.getElementById('btn-scan-email');
+  const btnText = btn.querySelector('.btn-text');
+  const spinner = btn.querySelector('.spinner');
+  const resultCard = document.getElementById('email-result-card');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const subject = subjectInput.value.trim();
+    const body = bodyInput.value.trim();
+
+    if (!body) {
+      PhishGuard.showToast('Please enter the email body text to analyze.', 'error');
+      return;
+    }
+
+    btn.disabled = true;
+    btnText.textContent = 'Analyzing Message...';
+    spinner.style.display = 'inline-block';
+
+    try {
+      const res = await PhishGuard.request('/api/scan-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, body })
+      });
+
+      const data = res.data;
+
+      // Update subject & score
+      document.getElementById('res-email-subject').textContent = data.subject || '(No Subject Provided)';
+      document.getElementById('res-email-score-num').textContent = data.risk_score;
+
+      const scoreBox = document.getElementById('res-email-score-box');
+      scoreBox.className = `score-box ${data.risk_level.toLowerCase()}`;
+
+      document.getElementById('res-email-pill-wrap').innerHTML = PhishGuard.getRiskPill(data.risk_level);
+
+      // Keywords panel
+      const kwPanel = document.getElementById('keywords-panel');
+      const kwChips = document.getElementById('res-keywords-chips');
+      if (data.detected_keywords && data.detected_keywords.length > 0) {
+        kwChips.innerHTML = data.detected_keywords.map(kw => `<span class="chip">${kw}</span>`).join('');
+        kwPanel.style.display = 'block';
+      } else {
+        kwPanel.style.display = 'none';
+      }
+
+      // Extracted URLs panel
+      const urlsPanel = document.getElementById('urls-panel');
+      const urlsTbody = document.getElementById('res-urls-tbody');
+      if (data.url_analyses && data.url_analyses.length > 0) {
+        urlsTbody.innerHTML = data.url_analyses.map(u => `
+          <tr>
+            <td class="cell-target font-mono">${u.url}</td>
+            <td class="font-mono text-muted">${u.hostname}</td>
+            <td><strong>${u.risk_score} / 100</strong></td>
+            <td>${PhishGuard.getRiskPill(u.risk_level)}</td>
+          </tr>
+        `).join('');
+        urlsPanel.style.display = 'block';
+      } else {
+        urlsPanel.style.display = 'none';
+      }
+
+      // Recommendation box
+      const recBox = document.getElementById('res-email-rec-box');
+      recBox.className = `recommendation-box ${data.risk_level.toLowerCase()}`;
+      document.getElementById('res-email-recommendation').textContent = data.recommendation;
+
+      resultCard.style.display = 'block';
+      resultCard.scrollIntoView({ behavior: 'smooth' });
+      PhishGuard.showToast(`MailGuard: ${data.risk_level} Risk`, data.risk_level === 'High' ? 'error' : 'success');
+    } catch (err) {
+      console.error('MailGuard error:', err);
+    } finally {
+      btn.disabled = false;
+      btnText.textContent = 'Analyze Email Content';
+      spinner.style.display = 'none';
+    }
+  });
+});
+</script>
+{% endblock %}
